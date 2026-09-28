@@ -7,6 +7,7 @@ import ru.corelia.auth.AuthContext;
 import ru.corelia.config.CoreliaRuntimeConfig;
 import ru.corelia.provider.BinaryStorage;
 import ru.corelia.provider.model.BinaryStoreRequest;
+import ru.corelia.provider.model.BinaryLocation;
 import ru.corelia.provider.model.BinaryMetadata;
 import ru.corelia.provider.model.StorageReference;
 import ru.corelia.provider.model.StoredFile;
@@ -35,11 +36,17 @@ public final class S3BinaryStorage implements BinaryStorage {
         this.bucket = bucket;
     }
 
-    @Override public StoredFile store(BinaryStoreRequest request, InputStream content, AuthContext auth) {
+    @Override public BinaryLocation reserve(BinaryStoreRequest request, AuthContext auth) {
         String id = UUID.randomUUID().toString();
+        return new BinaryLocation(new StorageReference(REFERENCE_PREFIX + id), "s3", bucket, key(id));
+    }
+
+    @Override public StoredFile store(BinaryStoreRequest request, InputStream content, AuthContext auth) {
+        if (request.reference() == null) throw new IllegalArgumentException("Для S3 storage reference должен быть зарезервирован");
+        String id = id(request.reference());
         client.putObject(builder -> builder.bucket(bucket).key(key(id)).contentType(request.contentType()).metadata(java.util.Map.of("sha256", request.checksum())),
                 RequestBody.fromInputStream(content, request.size()));
-        return new StoredFile(new StorageReference(REFERENCE_PREFIX + id), request.checksum(), request.size(), request.contentType());
+        return new StoredFile(request.reference(), request.checksum(), request.size(), request.contentType());
     }
 
     @Override public InputStream read(StorageReference reference, AuthContext auth) {
