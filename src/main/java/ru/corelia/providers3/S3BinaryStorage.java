@@ -3,9 +3,11 @@ package ru.corelia.providers3;
 import java.io.InputStream;
 import java.net.URI;
 import java.util.UUID;
+import java.util.List;
 import ru.corelia.auth.AuthContext;
 import ru.corelia.config.CoreliaRuntimeConfig;
 import ru.corelia.provider.BinaryStorage;
+import ru.corelia.provider.LegacyBinaryReader;
 import ru.corelia.provider.model.BinaryStoreRequest;
 import ru.corelia.provider.model.BinaryLocation;
 import ru.corelia.provider.model.BinaryMetadata;
@@ -22,18 +24,21 @@ public final class S3BinaryStorage implements BinaryStorage {
     private static final String REFERENCE_PREFIX = "corelia-blob://";
     private final S3Client client;
     private final String bucket;
+    private final List<LegacyBinaryReader> legacyReaders;
 
-    public S3BinaryStorage(CoreliaRuntimeConfig config) {
+    public S3BinaryStorage(CoreliaRuntimeConfig config, List<LegacyBinaryReader> legacyReaders) {
         bucket = required(config, "CORELIA_S3_BUCKET");
         String endpoint = required(config, "CORELIA_S3_ENDPOINT");
         client = S3Client.builder().endpointOverride(URI.create(endpoint)).region(Region.of(config.value("CORELIA_S3_REGION", "us-east-1")))
                 .forcePathStyle(true).credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(
                 required(config, "CORELIA_S3_ACCESS_KEY"), required(config, "CORELIA_S3_SECRET_KEY")))).build();
+        this.legacyReaders = List.copyOf(legacyReaders);
     }
 
     S3BinaryStorage(S3Client client, String bucket) {
         this.client = client;
         this.bucket = bucket;
+        this.legacyReaders = List.of();
     }
 
     @Override public BinaryLocation reserve(BinaryStoreRequest request, AuthContext auth) {
@@ -50,6 +55,7 @@ public final class S3BinaryStorage implements BinaryStorage {
     }
 
     @Override public InputStream read(StorageReference reference, AuthContext auth) {
+        if (!reference.value().startsWith(REFERENCE_PREFIX)) return legacy(reference, auth);
         return client.getObject(builder -> builder.bucket(bucket).key(key(id(reference))));
     }
 
@@ -72,6 +78,11 @@ public final class S3BinaryStorage implements BinaryStorage {
     }
 
     private static String key(String id) { return "blobs/" + id; }
+    private InputStream legacy(StorageReference reference, AuthContext auth) {
+        return legacyReaders.stream().filter(reader -> reader.supports(reference)).findFirst()
+                .orElseThrow(() -> new IllegalArgumentException("Storage reference не принадлежит S3 или migration reader"))
+                .read(reference, auth);
+    }
     private static String id(StorageReference reference) {
         String value = reference.value();
         if (!value.startsWith(REFERENCE_PREFIX)) throw new IllegalArgumentException("Storage reference не принадлежит S3 provider");
