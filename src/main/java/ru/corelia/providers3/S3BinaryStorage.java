@@ -16,6 +16,7 @@ import ru.corelia.provider.model.StoredFile;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 
@@ -29,7 +30,8 @@ public final class S3BinaryStorage implements BinaryStorage {
     public S3BinaryStorage(CoreliaRuntimeConfig config, List<LegacyBinaryReader> legacyReaders) {
         bucket = required(config, "CORELIA_S3_BUCKET");
         String endpoint = required(config, "CORELIA_S3_ENDPOINT");
-        client = S3Client.builder().endpointOverride(URI.create(endpoint)).region(Region.of(config.value("CORELIA_S3_REGION", "us-east-1")))
+        client = S3Client.builder().httpClientBuilder(UrlConnectionHttpClient.builder())
+                .endpointOverride(URI.create(endpoint)).region(Region.of(config.value("CORELIA_S3_REGION", "us-east-1")))
                 .forcePathStyle(true).credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(
                 required(config, "CORELIA_S3_ACCESS_KEY"), required(config, "CORELIA_S3_SECRET_KEY")))).build();
         this.legacyReaders = List.copyOf(legacyReaders);
