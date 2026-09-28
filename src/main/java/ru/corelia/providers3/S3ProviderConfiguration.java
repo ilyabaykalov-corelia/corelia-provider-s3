@@ -14,7 +14,9 @@ import ru.corelia.provider.ProviderDescriptor;
 @AutoConfiguration
 @ConditionalOnProperty(name = "corelia.provider.binary-storage", havingValue = "s3")
 public class S3ProviderConfiguration {
-    @Bean BinaryStorage s3BinaryStorage(CoreliaRuntimeConfig config, java.util.List<LegacyBinaryReader> legacyReaders) {
+    @Bean BinaryStorage s3BinaryStorage(
+            @org.springframework.beans.factory.annotation.Qualifier("coreliaRuntimeConfig") CoreliaRuntimeConfig config,
+            java.util.List<LegacyBinaryReader> legacyReaders) {
         return new S3BinaryStorage(config, legacyReaders);
     }
     @Bean ProviderDescriptor s3ProviderDescriptor() { return new ProviderDescriptor() {
