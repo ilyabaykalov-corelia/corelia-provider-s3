@@ -7,6 +7,7 @@ import ru.corelia.auth.AuthContext;
 import ru.corelia.config.CoreliaRuntimeConfig;
 import ru.corelia.provider.BinaryStorage;
 import ru.corelia.provider.model.BinaryStoreRequest;
+import ru.corelia.provider.model.BinaryMetadata;
 import ru.corelia.provider.model.StorageReference;
 import ru.corelia.provider.model.StoredFile;
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
@@ -26,7 +27,12 @@ public final class S3BinaryStorage implements BinaryStorage {
         String endpoint = required(config, "CORELIA_S3_ENDPOINT");
         client = S3Client.builder().endpointOverride(URI.create(endpoint)).region(Region.of(config.value("CORELIA_S3_REGION", "us-east-1")))
                 .forcePathStyle(true).credentialsProvider(StaticCredentialsProvider.create(AwsBasicCredentials.create(
-                        required(config, "CORELIA_S3_ACCESS_KEY"), required(config, "CORELIA_S3_SECRET_KEY")))).build();
+                required(config, "CORELIA_S3_ACCESS_KEY"), required(config, "CORELIA_S3_SECRET_KEY")))).build();
+    }
+
+    S3BinaryStorage(S3Client client, String bucket) {
+        this.client = client;
+        this.bucket = bucket;
     }
 
     @Override public StoredFile store(BinaryStoreRequest request, InputStream content, AuthContext auth) {
@@ -38,6 +44,24 @@ public final class S3BinaryStorage implements BinaryStorage {
 
     @Override public InputStream read(StorageReference reference, AuthContext auth) {
         return client.getObject(builder -> builder.bucket(bucket).key(key(id(reference))));
+    }
+
+    @Override public InputStream read(StorageReference reference, long offset, long length, AuthContext auth) {
+        if (offset < 0 || length < 1) throw new IllegalArgumentException("Некорректный диапазон binary content");
+        long last = Math.addExact(offset, length - 1);
+        return client.getObject(builder -> builder.bucket(bucket).key(key(id(reference)))
+                .range("bytes=" + offset + "-" + last));
+    }
+
+    @Override public BinaryMetadata metadata(StorageReference reference, AuthContext auth) {
+        var response = client.headObject(builder -> builder.bucket(bucket).key(key(id(reference))));
+        Long size = response.contentLength();
+        if (size == null || size < 0) throw new IllegalStateException("S3 не вернул размер binary content");
+        return new BinaryMetadata(size, response.contentType(), response.metadata().getOrDefault("sha256", ""));
+    }
+
+    @Override public void delete(StorageReference reference, AuthContext auth) {
+        client.deleteObject(builder -> builder.bucket(bucket).key(key(id(reference))));
     }
 
     private static String key(String id) { return "blobs/" + id; }
