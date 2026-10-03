@@ -20,7 +20,7 @@ import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 
-/** S3-compatible adapter: physical object key остаётся внутренней деталью provider-а. */
+/** S3-совместимый адаптер: физический ключ объекта остаётся внутренней деталью provider-а. */
 public final class S3BinaryStorage implements BinaryStorage {
     private static final String REFERENCE_PREFIX = "corelia-blob://";
     private final S3Client client;
